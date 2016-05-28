@@ -1,6 +1,18 @@
+/* **************************************************
+ * this is just an example to show how library works
+ * this project is on atmega32 
+ * pin connections(LCD->AVR):
+ * VCC->+3.3
+ * GND->GND
+ * CS->PB0
+ * RST->PB1
+ * A0->PB2
+ * SDA->MOSI
+ * SCK->SCK
+ * LED->VCC
+ ************************************************** */
+
 #include "tft144.h"
-//#include <avr/io.h>
-//#include <util/delay.h>
 
 int main() {
 	int a,b;
@@ -16,6 +28,6 @@ int main() {
 			tft144_draw_dot(a,b,RGB565(a*a,b*b,a*b));
 	tft144_clear_display(_RGB565(255,255,255));
 	a=0; b=64;
-	lcd_putstring(&a, &b, "ehsan.ecc@gmail.com\n09120187769\n09364075229", _RGB565(0,0,0), _RGB565(0,0,0));
+	lcd_putstring(&a, &b, "just sample text!", _RGB565(0,0,0), _RGB565(0,0,0));
 	while(1) ;
 }

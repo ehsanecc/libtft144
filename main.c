@@ -31,3 +31,4 @@ int main() {
 	lcd_putstring(&a, &b, "just sample text!", _RGB565(0,0,0), _RGB565(0,0,0));
 	while(1) ;
 }
+// <<

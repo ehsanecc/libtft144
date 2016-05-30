@@ -362,7 +362,7 @@ void tft144_draw_bezier(uint8_t x[4], uint8_t y[4], colour color) {
 		yt = pow(1 - t, 3) * y[0] + 3 * t * pow(1 - t, 2) * y[1]
 				+ 3 * pow(t, 2) * (1 - t) * y[2] + pow(t, 3) * y[3];
 
-		tft144_draw_dot_alpha(xt, yt, color,t);
+		tft144_draw_dot(xt, yt, color);
 	}
 }
 

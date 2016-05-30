@@ -51,25 +51,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-// these colors calculated once for all
-const colour
-	BLUE=_RGB565(0,0,255),
-	GREEN=_RGB565(0,255,0),
-	RED=_RGB565(255,0,0),
-	PINK=_RGB565(255,120,120),
-	LIGHTBLUE=_RGB565(120,120,255),
-	LIGHTGREEN=_RGB565(120,255,120),
-	BLACK=_RGB565(0,0,0),
-	WHITE=_RGB565(255,255,255),
-	GREY=_RGB565(120,120,120),
-	LIGHTGREY=_RGB565(200,200,200),
-	YELLOW=_RGB565(255,255,0),
-	MAGENTA=_RGB565(255,0,255),
-	CYAN=_RGB565(0,255,255);
-
-/* global vars */
-uint8_t fontW, fontH;
+#include <ctype.h>
 
 /* rgb565 */
 inline uint16_t RGB565(uint8_t r, uint8_t g, uint8_t b) {
@@ -104,12 +86,12 @@ void tft144_ledon(uint8_t onoff) {
 		TFT_CTRL_PORT &= ~(1<<TFT_LED);
 }
 
-uint8_t tft144_textX(uint8_t x, uint8_t font) {
-	return fontDim[font][0];
+uint8_t tft144_textW(uint8_t x, uint8_t font) {
+	return 0;
 }
 
-uint8_t tft144_textY(uint8_t y, uint8_t font) {
-	return fontDim[font][1];
+uint8_t tft144_textH(uint8_t y, uint8_t font) {
+	return 0;
 }
 
 void tft144_reset() {
@@ -197,7 +179,7 @@ void tft144_clear_display(colour color) {
 	}
 }
 
-void tft144_set_frame(u8 x1, u8 x2, u8 y1, u8 y2) {
+void tft144_set_frame(uint8_t x1, uint8_t x2, uint8_t y1, uint8_t y2) {
 	if(REDBOARD) {
 		if(ORIENTATION == ORIENTATION0) {
 			y1 += 32;
@@ -221,7 +203,7 @@ void tft144_set_frame(u8 x1, u8 x2, u8 y1, u8 y2) {
 	tft144_write_data(NULL, y2, 1);
 }
 
-void tft144_draw_dot(u8 x, u8 y, colour color) {
+void tft144_draw_dot(uint8_t x, uint8_t y, colour color) {
 	uint8_t color_hi = color>>8, color_lo=color&0xff;
 
 	tft144_set_frame(x, x+1, y, y+1);
@@ -231,8 +213,102 @@ void tft144_draw_dot(u8 x, u8 y, colour color) {
 	spi_write(color_lo);
 }
 
-void tft144_draw_line(u8 x0, u8 y0, u8 x1, u8 y1, colour color) {
-	uint8_t dx, dy, stepy, stepx, fraction;
+/* this function needs to read pixel and mix with current color with factor of alpha
+ * but as read from LCD is not implemented so it's not possible!
+ */
+void tft144_draw_dot_alpha(uint8_t x, uint8_t y, colour color, float alpha) {
+	uint8_t r,g,b;
+
+	// 00000000
+	// BBBBBGGGGGGRRRRR
+	// extract rgb
+	r=(color&0x1f)<<3;
+	g=(color&(0x3f<<5))>>3;
+	b=(color&(0x1f<<11))>>8;
+
+	// multiply by brightness ( 0 < brightness < 1 )
+	r=(uint8_t)(((float)r)*alpha);
+	g=(uint8_t)(((float)g)*alpha);
+	b=(uint8_t)(((float)b)*alpha);
+
+	tft144_draw_dot(x,y,RGB565(r,g,b));
+}
+
+/* Xialin Wu's alias line algorithm
+ *
+ * This function needs READ from LCD for alpha channeling... but unfortunately
+ * i didn't implement read operation for LCD yet, because i don't know how! :(
+ */
+
+#define _ipart(x)		((int)(x))
+#define _round(x)		(_ipart(x)+0.5f)
+#define _fpart(x)		((x)<0?1-((x)-floor(x)):(x)-floor(x))
+#define _rfpart(x)		(1-_fpart(x))
+#define _swap(a,b,c)	{c=a;a=b;b=c;}
+
+void tft144_draw_line_aliased(uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1, colour color) {
+	int16_t steep = abs(y1 - y0) > abs(x1 - x0), c, x, xpxl1, ypxl1, xpxl2,
+			ypxl2, xend, yend, xgap;
+	float dx, dy, gradient, intery;
+
+	if (steep) {
+		_swap(x0, y0, c);
+		_swap(x1, y1, c);
+	}
+	if (x0 > x1) {
+		_swap(x0, x1, c);
+		_swap(y0, y1, c);
+	}
+
+	dx = x1 - x0;
+	dy = y1 - y0;
+	gradient = dy / dx;
+
+	// handle first endpoint
+	xend = _round(x0);
+	yend = y0 + gradient * (xend - x0);
+	xgap = _rfpart(x0 + 0.5f);
+	xpxl1 = xend; // this will be used in the main loop
+	ypxl1 = _ipart(yend);
+	if (steep) {
+		tft144_draw_dot_alpha(ypxl1, xpxl1, color, _rfpart(yend) * xgap);
+		tft144_draw_dot_alpha(ypxl1 + 1, xpxl1, color, _fpart(yend) * xgap);
+	} else {
+		tft144_draw_dot_alpha(xpxl1, ypxl1, color, _rfpart(yend) * xgap);
+		tft144_draw_dot_alpha(xpxl1, ypxl1 + 1, color, _fpart(yend) * xgap);
+	}
+	intery = yend + gradient; // first y-intersection for the main loop
+
+	// handle second endpoint
+	xend = _round(x1);
+	yend = y1 + gradient * (xend - x1);
+	xgap = _rfpart(x1 + 0.5f);
+	xpxl2 = xend;
+	//this will be used in the main loop
+	ypxl2 = _ipart(yend);
+	if (steep) {
+		tft144_draw_dot_alpha(ypxl2, xpxl2, color, _rfpart(yend) * xgap);
+		tft144_draw_dot_alpha(ypxl2 + 1, xpxl2, color, _fpart(yend) * xgap);
+	} else {
+		tft144_draw_dot_alpha(xpxl2, ypxl2, color, _rfpart(yend) * xgap);
+		tft144_draw_dot_alpha(xpxl2, ypxl2 + 1, color, _fpart(yend) * xgap);
+	}
+
+	// main loop
+	for (x = xpxl1 + 1; x < (xpxl2 - 1); x++) {
+		if (steep) {
+			tft144_draw_dot_alpha(_ipart(intery), x, color, _rfpart(intery));
+			tft144_draw_dot_alpha(_ipart(intery) + 1, x, color, _fpart(intery));
+		} else {
+			tft144_draw_dot_alpha(x, _ipart(intery), color, _rfpart(intery));
+			tft144_draw_dot_alpha(x, _ipart(intery) + 1, color, _fpart(intery));
+		}
+		intery = intery + gradient;
+	}
+}
+
+void tft144_draw_line(uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1, colour color) {
+	int16_t dx, dy, stepy, stepx, fraction;
 
 	dy = y1 - y0;
 	dx = x1 - x0;
@@ -274,14 +350,30 @@ void tft144_draw_line(u8 x0, u8 y0, u8 x1, u8 y1, colour color) {
 	}
 }
 
-void tft144_draw_rectangle(u8 x0, u8 y0, u8 x1, u8 y1, colour color) {
+/* four-point bezier curve drawing */
+void tft144_draw_bezier(uint8_t x[4], uint8_t y[4], colour color) {
+	int i;
+	float t, xt, yt;
+
+	for (t = 0.0f; t < 1.0f; t += 0.001f) {
+		xt = pow(1 - t, 3) * x[0] + 3 * t * pow(1 - t, 2) * x[1]
+				+ 3 * pow(t, 2) * (1 - t) * x[2] + pow(t, 3) * x[3];
+
+		yt = pow(1 - t, 3) * y[0] + 3 * t * pow(1 - t, 2) * y[1]
+				+ 3 * pow(t, 2) * (1 - t) * y[2] + pow(t, 3) * y[3];
+
+		tft144_draw_dot_alpha(xt, yt, color,t);
+	}
+}
+
+void tft144_draw_rectangle(uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1, colour color) {
 	tft144_draw_line(x0, y0, x0, y1, color);
 	tft144_draw_line(x0, y1, x1, y1, color);
 	tft144_draw_line(x1, y0, x1, y1, color);
 	tft144_draw_line(x0, y0, x1, y0, color);
 }
 
-void tft144_draw_filled_rectangle(u8 x0, u8 y0, u8 x1, u8 y1, colour color) {
+void tft144_draw_filled_rectangle(uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1, colour color) {
 	uint8_t color_hi = color >> 8, color_lo = color & 0xff, a, b;
 
 	tft144_set_frame(x0, x1, y0, y1);
@@ -295,8 +387,8 @@ void tft144_draw_filled_rectangle(u8 x0, u8 y0, u8 x1, u8 y1, colour color) {
 		}
 }
 
-void tft144_draw_circle(u8 x0, u8 y0, u8 radio, colour color) {
-	uint8_t error, errorx, errory, y, x;
+void tft144_draw_circle(uint8_t x0, uint8_t y0, uint8_t radio, colour color) {
+	int16_t error, errorx, errory, y, x;
 
 	error = 1 - radio;
 	errorx = 1;
@@ -327,87 +419,64 @@ void tft144_draw_circle(u8 x0, u8 y0, u8 radio, colour color) {
 	}
 }
 
-void tft144_putchar(u8 character, u8 x, u8 y, colour fgcolor, colour bgcolor, u8 font) {
-	uint8_t fgcolor_hi = fgcolor >> 8, fgcolor_lo = fgcolor & 0xff, bgcolor_hi =
-			bgcolor >> 8, bgcolor_lo = bgcolor & 0xff, fontScale, xx[4], *cbuf,
-			column, row, flor[2], topleft, pixOn, rpt;
+/* this function seems a little bit slow(for it's random dot filling technique) but i found its really effective
+   when you have no background color! and write your character on your picture!
+   it returns the width printed (useful when your font is too heavy with spaces!) */
+uint8_t tft144_putchar(char c, uint8_t x, uint8_t y, colour fgcolor, colour bgcolor, uint8_t font, uint8_t w, uint8_t h, uint8_t offset) {
+	uint8_t i, j, o, k, fcs, tmp_char, cw=0;
 
-	fontW = fontDim[font][0];
-	fontH = fontDim[font][1];
-	fontScale = fontDim[font][2];
-	if (!(font == 3 || font == 4)) {   // restricted char set 32-126 for most
-		if (character < 32 || character > 126) // only strictly ascii chars
-			character = 0;
-		else
-			character -= 32;
-		tft144_set_frame(x, (x + fontW - 1), y, (y + fontH - 1));
-
-		if (fontScale == 2) {
-			//xx = [0, 2, 2 * fontW, 2 + (2 * fontW) ]   // DOUBLE: every pixel becomes a 2x2 pixel
-			xx[0] = 0;
-			xx[1] = 2;
-			xx[2] = 2 * fontW;
-			xx[3] = 2 + (2 * fontW);
-		}
-
-		tft144_write_command(WRITE_MEMORY_START);
-		cbuf = (uint8_t*) malloc(fontW * fontH * 2);
-		flor[0] = floor(fontH / fontScale);
-		flor[1] = floor(fontW / fontScale);
-		for (column = 0; column < flor[0]; column++) {
-			for (row = 0; row < flor[1]; row++) {
-				topleft = ((column * 2 * fontScale)
-						+ (row * 2 * fontW * fontScale));
-				if (font <= 2)
-					//pixOn = (font4x6[character][row]) & (1 << column);
-					pixOn = (pgm_read_byte(font4x6+(character*6)+row)) & (1 << column);
-				else if (font >= 7)
-					//pixOn = (font8x16[character][row]) & (1 << column);
-					pixOn = (pgm_read_byte(font8x16+(character*16)+row)) & (1 << column);
-				else if (font >= 5)
-					//pixOn = (font8x12[character][row]) & (1 << column);
-					pixOn = (pgm_read_byte(font8x12+(character*13)+row)) & (1 << column);
-				else
-					//pixOn = (font6x8[character][column]) & (1 << row);
-					pixOn = pgm_read_byte(font6x8+(character*6)+column) & (1<<row);
-				if (pixOn) {
-					for (rpt = 0; rpt < 4; rpt++) { // one pixel or a 2x2 "doubled" pixel
-						cbuf[xx[rpt] + topleft] = fgcolor_hi;
-						cbuf[xx[rpt] + 1 + topleft] = fgcolor_lo;
-					}
-				} else {
-					for (rpt = 0; rpt < 4; rpt++) {
-						cbuf[xx[rpt] + topleft] = bgcolor_hi;
-						cbuf[xx[rpt] + 1 + topleft] = bgcolor_lo;
-					}
+	k = (((h-1)/8)+1);
+	fcs = k*w; // font character size
+	for(i=0;i<fcs;i+=k)
+		for(o=0;o<k;o++) {
+			tmp_char=pgm_read_byte(pgm_read_word(&fontlib[font])+6+((((c-offset)*fcs)+i+o)*2));
+			for(j=0;j<8;j++)
+				if((tmp_char >> j)&1) {
+					tft144_draw_dot(x+(i/k), y+j+(o*8),fgcolor);
+					if((i/k)>cw) cw=(i/k);
 				}
-			}
 		}
-		tft144_write_data(cbuf, 0, fontW * fontH * 2);
-	}
 
-	free(cbuf);
+	return cw;
 }
 
-void tft144_putstring(u8 *str, u8 originx, u8 y, colour fgcolor, colour bgcolor, u8 font) {
-	uint8_t x, n;
+/* x & y are pointers to global(or local) variables that caller gives.
+   the idea behind this is to give the caller a screen, that can write multiple times with just
+   one x & y initialization.
+   you can see in this function x & y updates after every character process. */
+void tft144_putstring(char *str, uint8_t *x, uint8_t *y, colour fgcolor, colour bgcolor, uint8_t font) {
+	uint8_t cw,w,h,offset;
 
-	x = originx;
-	fontW = fontDim[font][0];
-	fontH = fontDim[font][1];
-	for (n = 0; n < strlen(str); n++) {
-		if ((x + fontW) > TFTWIDTH) {
-			x = originx;
-			y += (fontH);
+	w=pgm_read_byte(pgm_read_word(&fontlib[font]));
+	h=pgm_read_byte(pgm_read_word(&fontlib[font])+2);
+	offset=pgm_read_byte(pgm_read_word(&fontlib[font])+4);
+	while (*str) {
+		if (*x > (TFTWIDTH - w)) {
+			*y += h;
+			*x = 0;
+		} // (end of screen)
+		if (*str == '\n') {
+			*y += h;
+			*x = 0;
+		} // newline
+		else if (*str == '\r')
+			*x = 0; // return
+		else if (*str == '\b')
+			*x -= w; // backspace
+		else if (*str == '\v')
+			*x = *y = 0; // start of screen
+		else if ((*str >= offset) && (isprint(*str))) {
+			cw = tft144_putchar(*str, *x, *y, fgcolor, bgcolor, font, w, h,
+					offset);
+			*x += (cw ? cw + 2 : w / 2);
 		}
-		if ((y + fontH) > TFTHEIGHT)
-			break;
-		tft144_putchar(str[n], x, y, fgcolor, bgcolor, font);
-		x += (fontW);
+
+		str++;
 	}
 }
-void tft144_draw_bmp(u8 *filename, u8 x0, u8 y0) {
-	// ... os function
+
+void tft144_draw_bmp(uint8_t *filename, uint8_t x0, uint8_t y0) {
+	// ... not implemented function
 }
 
 void tft144_invert_screen() {
@@ -416,38 +485,5 @@ void tft144_invert_screen() {
 
 void tft144_normal_screen() {
 	tft144_write_command(EXIT_INVERT_MODE);
-}
-
-/********* EXTERNAL */
-void aputchar(uint8_t x,uint8_t y,uint8_t c,colour charColor,colour bkColor)
-{
-  uint16_t i=0, j=0;
-  
-  uint8_t tmp_char=0;
-
-  for (i=0;i<16;i++) {
-    //tmp_char=ascii_8x16[((c-0x20)*16)+i]; // row sweep
-	tmp_char=pgm_read_byte(ascii_8x16+((c-0x20)*16)+i);
-    for (j=0;j<8;j++) {
-      if ((tmp_char >> 7-j)&0x01)
-        tft144_draw_dot(x+j,y+i,charColor);
-      //else
-       // tft144_draw_dot(x+j,y+i,bkColor);
-    }
-  }
-}
-
-/* added support to some basical text screens */
-void lcd_putstring(uint8_t *x, uint8_t *y, char *str, colour Color, colour bColor) {
-  //uint16_t ox=*x;
-  while(*str) {
-	if(*x > 120) { *y+=16; *x=0; } // (end of screen)
-    if(*str == '\n') { *y+=16; *x=0; } // newline
-    else if(*str == '\r') *x=0; // return
-    else if(*str == '\b') *x-=8; // backspace
-    else if(*str == '\v') *x = *y = 0; // start of screen
-    else aputchar(*x,*y,*str,(Color),(bColor)), *x+=8;
-    str++;
-  }
 }
 

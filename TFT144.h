@@ -1,8 +1,8 @@
 /*
- * CTFT144.h
+ * TFT144.h
  *
  *  Created on: May 27, 2016
- *      Author: ehsan
+ *      Author: Ehsan
  */
 
 #ifndef TFT144_H_
@@ -14,6 +14,7 @@
 #define TFTWIDTH 128
 #define TFTHEIGHT 128
 
+// abbreviation for times i get lazy :D
 #define u8			uint8_t
 #define u16			uint16_t
 #define u32			uint32_t
@@ -58,14 +59,31 @@
 #define NEGATIVE_GAMMA_CORRECT 0xE1
 #define GAM_R_SEL 0xF2
 
+// sleep in seconds
 #define sleep(n)	_delay_ms(n*1000)
 
-#define _RGB565(b,g,r)	((((uint16_t)r)&0xf8)<<8)|((((uint16_t)g)&0xfc)<<3)|((((uint16_t)b)&0xf8)>>3)
+// preprocessor color calculator
+#define _RGB565(r,g,b)	((((uint16_t)r)&0xf8)<<8)|((((uint16_t)g)&0xfc)<<3)|((((uint16_t)b)&0xf8)>>3)
+#define _BGR565(r,g,b)	((((uint16_t)b)&0xf8)<<8)|((((uint16_t)g)&0xfc)<<3)|((((uint16_t)r)&0xf8)>>3)
 
 typedef uint16_t colour;
 
+// default colors definition
+#define BLUE 			_BGR565(0,0,255)
+#define GREEN 			_BGR565(0,255,0)
+#define RED 			_BGR565(255,0,0)
+#define PINK 			_BGR565(255,120,120)
+#define LIGHTBLUE 		_BGR565(120,120,255)
+#define LIGHTGREEN 		_BGR565(120,255,120)
+#define BLACK 			_BGR565(0,0,0)
+#define WHITE 			_BGR565(255,255,255)
+#define GREY 			_BGR565(120,120,120)
+#define LIGHTGREY 		_BGR565(200,200,200)
+#define YELLOW 			_BGR565(255,255,0)
+#define MAGENTA 		_BGR565(255,0,255)
+#define CYAN			_BGR565(0,255,255)
 
-inline uint16_t RGB565(uint8_t r, uint8_t g, uint8_t b);
+uint16_t RGB565(uint8_t r, uint8_t g, uint8_t b);
 
 void tft144_init();
 void tft144_ledon(uint8_t onoff);
@@ -76,15 +94,17 @@ void tft144_write_command(const uint8_t address);
 void tft144_write_data(const uint8_t data[], const uint8_t byte, uint8_t size);
 void tft144_init_lcd(uint8_t orientation);
 void tft144_clear_display(colour color);
-void tft144_set_frame(u8 x1, u8 x2, u8 y1, u8 y2);
-void tft144_draw_dot(u8 x, u8 y, colour color);
-void tft144_draw_line(u8 x0, u8 y0, u8 x1, u8 y1, colour color);
-void tft144_draw_rectangle(u8 x0, u8 y0, u8 x1, u8 y1, colour color);
-void tft144_draw_filled_rectangle(u8 x0, u8 y0, u8 x1, u8 y1, colour color);
-void tft144_draw_circle(u8 x0, u8 y0, u8 radio, colour color);
-void tft144_putchar(u8 character, u8 x, u8 y, colour fgcolor, colour bgcolor, u8 font);
-void tft144_putstring(u8 *str, u8 x, u8 y, colour fgcolor, colour bgcolor, u8 font);
-void tft144_draw_bmp(u8 *filename, u8 x0, u8 y0);
+void tft144_set_frame(uint8_t x1, uint8_t x2, uint8_t y1, uint8_t y2);
+void tft144_draw_dot(uint8_t x, uint8_t y, colour color);
+void tft144_draw_dot_alpha(uint8_t x, uint8_t y, colour color, float alpha);
+void tft144_draw_line(uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1, colour color);
+void tft144_draw_bezier(uint8_t x[4], uint8_t y[4], colour color);
+void tft144_draw_rectangle(uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1, colour color);
+void tft144_draw_filled_rectangle(uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1, colour color);
+void tft144_draw_circle(uint8_t x0, uint8_t y0, uint8_t radio, colour color);
+uint8_t tft144_putchar(char c, uint8_t x, uint8_t y, colour fgcolor, colour bgcolor, uint8_t font, uint8_t w, uint8_t h, uint8_t offset);
+void tft144_putstring(char *str, uint8_t *x, uint8_t *y, colour fgcolor, colour bgcolor, uint8_t font);
+void tft144_draw_bmp(uint8_t *filename, uint8_t x0, uint8_t y0);
 void tft144_invert_screen();
 void tft144_normal_screen();
 

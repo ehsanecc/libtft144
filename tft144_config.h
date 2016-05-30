@@ -24,7 +24,7 @@
 #define TFT_CTRL_PORT		PORTB
 #define TFT_CTRL_PIN		PINB
 #define TFT_CTRL_DDR		DDRB
-#define TFT_CE				0 // It's SPIs SS pin ( active low )
+#define TFT_CE				0 // Active Low
 #define TFT_DC				2 // A0
 #define TFT_RST				1
 #define TFT_LED				3
